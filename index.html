@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1A1714" />
+    <meta name="description" content="Vein City — the city doesn't have a grid. The city has a heartbeat." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Playgama Bridge SDK — loads before the app module so window.bridge exists
+         at boot. If it fails to load (offline / non-Playgama host) the game falls
+         back to a localStorage mock automatically. -->
+    <script src="https://bridge.playgama.com/v1/stable/playgama-bridge.js"></script>
+    <title>VEIN CITY</title>
+    <link rel="icon" type="image/png" href="./mainmenu/menu_emblem.png" />
+    <link rel="apple-touch-icon" href="./mainmenu/menu_emblem.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Special+Elite&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <style>
+      html,body{margin:0;padding:0;background:#1A1714;height:100%;overflow:hidden;overscroll-behavior:none}
+      #splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#1A1714;z-index:9999;transition:opacity .6s}
+      #splash .vc{font-family:'Oswald',sans-serif;font-weight:700;letter-spacing:.35em;color:#C4922A;font-size:clamp(28px,6vw,52px)}
+      #splash .tag{font-family:'Special Elite',monospace;color:#7a6a55;font-size:clamp(11px,2vw,14px)}
+      #splash .beat{width:10px;height:10px;border-radius:50%;background:#B5451B;animation:vcbeat 1s infinite}
+      @keyframes vcbeat{0%,100%{transform:scale(1);opacity:.5}14%{transform:scale(1.7);opacity:1}28%{transform:scale(1.2)}42%{transform:scale(1.6);opacity:.9}}
+    </style>
+  </head>
+  <body>
+    <div id="splash">
+      <div class="vc">VEIN&nbsp;CITY</div>
+      <div class="beat"></div>
+      <div class="tag">the city has a heartbeat…</div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
