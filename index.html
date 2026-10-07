@@ -19,15 +19,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Special+Elite&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <style>
       html,body{margin:0;padding:0;background:#1A1714;height:100%;overflow:hidden;overscroll-behavior:none}
-      #splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#1A1714;z-index:9999;transition:opacity .6s}
+      .hidden{display:none!important}
+      #splash.loading-veil{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#1A1714;z-index:9999}
       #splash .vc{font-family:'Oswald',sans-serif;font-weight:700;letter-spacing:.35em;color:#C4922A;font-size:clamp(28px,6vw,52px)}
       #splash .tag{font-family:'Special Elite',monospace;color:#7a6a55;font-size:clamp(11px,2vw,14px)}
       #splash .beat{width:10px;height:10px;border-radius:50%;background:#B5451B;animation:vcbeat 1s infinite}
+      #splash.loading-veil--out{animation:veil-fade-out .45s cubic-bezier(.4,0,.6,1) forwards}
       @keyframes vcbeat{0%,100%{transform:scale(1);opacity:.5}14%{transform:scale(1.7);opacity:1}28%{transform:scale(1.2)}42%{transform:scale(1.6);opacity:.9}}
+      @keyframes veil-fade-out{from{opacity:1}to{opacity:0;pointer-events:none}}
     </style>
   </head>
   <body>
-    <div id="splash">
+    <div id="splash" class="loading-veil">
       <div class="vc">VEIN&nbsp;CITY</div>
       <div class="beat"></div>
       <div class="tag">the city has a heartbeat…</div>

@@ -1,0 +1,25 @@
+{
+  "platforms": {
+    "playgama": {}
+  },
+  "advertisement": {
+    "interstitial": {
+      "placements": [
+        { "id": "game_over" }
+      ]
+    },
+    "rewarded": {
+      "placements": [
+        { "id": "continue" }
+      ]
+    },
+    "banner": {
+      "placements": [
+        { "id": "menu" }
+      ]
+    }
+  },
+  "device": {
+    "supportedOrientations": ["landscape"]
+  }
+}

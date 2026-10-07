@@ -4,15 +4,16 @@ import App from './App.jsx';
 import './styles/global.css';
 import { platform } from './platform/bridge.js';
 import { SAVE_KEY } from './core/constants.js';
-import { audio } from './audio/AudioEngine.js';
 import { initLanguage } from './i18n/i18n.js';
 
-function hideSplash() {
+function dismissLoadingVeil() {
   const splash = document.getElementById('splash');
-  if (splash) {
-    splash.style.opacity = '0';
-    setTimeout(() => splash.remove(), 650);
-  }
+  if (!splash) return;
+
+  splash.classList.add('loading-veil--out');
+  splash.addEventListener('animationend', () => {
+    splash.classList.add('hidden');
+  }, { once: true });
 }
 
 async function boot() {
@@ -31,13 +32,12 @@ async function boot() {
   root.render(<App initialSave={initialSave} />);
 
   // 5. First playable frame is ready → dismiss the platform loader + splash.
-  requestAnimationFrame(() => {
-    setTimeout(() => { platform.gameReady(); hideSplash(); }, 250);
-  });
+  platform.gameReady();
+  dismissLoadingVeil();
 
   // Certification: stop all sound when the tab/window is hidden.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) audio.suspend(); else audio.resume();
+    platform.setDocumentHidden(document.hidden);
   });
 }
 

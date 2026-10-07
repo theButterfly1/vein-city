@@ -12,7 +12,7 @@ import { LEVELS, ACTS, getLevel } from '../../data/levels.js';
 import { audio } from '../../audio/AudioEngine.js';
 import { MENU_ART } from '../../assets/images.js';
 
-export default function MainMenu({ onPlayLevel }) {
+export default function MainMenu({ onPlayLevel, paused = false }) {
   const game = useGame();
   const [revealQueue, setRevealQueue] = useState([]);
   const [revealedNow, setRevealedNow] = useState([]); // ids already animated this visit
@@ -49,6 +49,7 @@ export default function MainMenu({ onPlayLevel }) {
   };
 
   const onPickDistrict = (id) => {
+    if (paused) return;
     audio.init();
     if (id === nextId || completed[id]) {
       onPlayLevel(id);
@@ -68,6 +69,7 @@ export default function MainMenu({ onPlayLevel }) {
     <div
       className="menu-screen"
       onPointerDown={() => {
+        if (paused) return;
         audio.init();
         audio.setEnabled(game.save.sound);
         audio.startHeartbeat(0.2);
@@ -104,12 +106,12 @@ export default function MainMenu({ onPlayLevel }) {
       {banner && <div className="menu-banner">{banner}</div>}
 
       <footer className="menu-bar">
-        <button className="menu-btn primary" onClick={() => { audio.init(); audio.playUI(); nextId ? onPlayLevel(nextId) : setShowLevels(true); }}>
+        <button className="menu-btn primary" onClick={() => { if (paused) return; audio.init(); audio.playUI(); nextId ? onPlayLevel(nextId) : setShowLevels(true); }}>
           {allDone ? 'REPLAY BLOCKS' : `▸ LEVEL ${String(nextId).padStart(2, '0')} — ${getLevel(nextId).name.toUpperCase()}`}
         </button>
-        <button className="menu-btn" onClick={() => { audio.init(); audio.playUI(); setShowLevels(true); }}>DISTRICTS</button>
-        <button className="menu-btn" onClick={() => { audio.init(); audio.playUI(); setShowJournal(true); }}>JOURNAL</button>
-        <button className="menu-btn" onClick={() => { game.setSound(!game.save.sound); audio.init(); audio.setEnabled(!game.save.sound); audio.playUI(); }}>
+        <button className="menu-btn" onClick={() => { if (paused) return; audio.init(); audio.playUI(); setShowLevels(true); }}>DISTRICTS</button>
+        <button className="menu-btn" onClick={() => { if (paused) return; audio.init(); audio.playUI(); setShowJournal(true); }}>JOURNAL</button>
+        <button className="menu-btn" onClick={() => { if (paused) return; game.setSound(!game.save.sound); audio.init(); audio.setEnabled(!game.save.sound); audio.playUI(); }}>
           {game.save.sound ? 'SOUND ◉' : 'SOUND ○'}
         </button>
       </footer>
@@ -134,7 +136,7 @@ export default function MainMenu({ onPlayLevel }) {
                     key={l.id}
                     className={`level-cell ${done ? 'done' : ''} ${!unlocked ? 'locked' : ''} ${l.id === nextId ? 'next' : ''}`}
                     disabled={!unlocked}
-                    onClick={() => { audio.playUI(); setShowLevels(false); onPlayLevel(l.id); }}
+                    onClick={() => { if (paused) return; audio.playUI(); setShowLevels(false); onPlayLevel(l.id); }}
                   >
                     <span className="lc-num">{String(l.id).padStart(2, '0')}</span>
                     <span className="lc-name">{l.name}</span>

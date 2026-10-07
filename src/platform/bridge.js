@@ -1,17 +1,10 @@
-// ─── Playgama Bridge wrapper ─────────────────────────────────────────────────
-// A thin, safe facade over the global `bridge` SDK (loaded via the CDN script
-// in index.html). Every call degrades to a localStorage / no-op mock when the
-// SDK is absent — local dev, itch.io, or any non-Playgama host — so the game
-// behaves identically everywhere and never throws if a platform lacks a feature.
-//
-// Docs: https://wiki.playgama.com/playgama/bridge-sdk
-
 import { audio } from '../audio/AudioEngine.js';
 
-// Placement / board / achievement identifiers. Interstitial & rewarded work
-// without explicit placements; leaderboard and achievement IDs must match what
-// you configure in the Playgama config editor / platform dashboard.
 export const IDS = {
+  interstitial: 'game_over',
+  rewarded: {
+    moves: 'continue'
+  },
   leaderboard: 'stars',
   achievements: {
     act1: 'act1_clear',
@@ -23,158 +16,344 @@ export const IDS = {
   }
 };
 
-const sdk = () => (typeof window !== 'undefined' ? window.bridge : null);
+class PlaygamaPlatform {
+  constructor() {
+    this._initialized = false;
+    this._audioEnabled = true;
+    this._isPlatformPaused = false;
+    this._documentHidden = false;
+    this._language = 'en';
+    this._ready = null;
+    this._pauseListeners = new Set();
+  }
 
-let _ready = null;
-let _hasBridge = false;
-let _rewardCb = null;
+  async init() {
+    if (this._ready) return this._ready;
 
-const EV = () => { try { return sdk().EVENT_NAME; } catch (e) { return {}; } };
-const on = (mod, name, fn) => { try { sdk()[mod].on(EV()[name], fn); } catch (e) { /* noop */ } };
-
-export const platform = {
-  get available() { return _hasBridge; },
-
-  // Resolves once the SDK is initialized — or immediately in mock mode.
-  init() {
-    if (_ready) return _ready;
-    _ready = new Promise((resolve) => {
-      const b = sdk();
-      if (!b || typeof b.initialize !== 'function') { _hasBridge = false; resolve(false); return; }
-      b.initialize()
-        .then(() => { _hasBridge = true; this._bindEvents(); resolve(true); })
-        .catch(() => { _hasBridge = false; resolve(false); });
-    });
-    return _ready;
-  },
-
-  get id() { try { return _hasBridge ? sdk().platform.id : 'mock'; } catch (e) { return 'mock'; } },
-
-  // ISO 639-1 language, falling back to the browser.
-  get language() {
-    try { if (_hasBridge && sdk().platform.language) return sdk().platform.language; } catch (e) { /* */ }
-    const nav = (typeof navigator !== 'undefined' && navigator.language) || 'en';
-    return nav.slice(0, 2).toLowerCase();
-  },
-
-  sendMessage(type, opts) {
-    try { if (_hasBridge) sdk().platform.sendMessage(type, opts); } catch (e) { /* */ }
-  },
-  gameReady() { this.sendMessage('game_ready'); },
-
-  // ── persistent storage ─────────────────────────────────────────────────────
-  // Reads through the platform (cloud where available) and always mirrors to
-  // localStorage so progress survives even if a platform write fails.
-  async load(key) {
-    try {
-      if (_hasBridge && sdk().storage) {
-        let v = await sdk().storage.get(key);
-        if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { /* keep string */ } }
-        if (v != null) return v;
+    this._ready = (async () => {
+      if (typeof bridge === 'undefined') {
+        console.info('[Playgama] Bridge not detected - running in dev/fallback mode.');
+        this._initialized = false;
+        this._language = this._browserLanguage();
+        return false;
       }
-    } catch (e) { /* fall through */ }
-    try {
-      const raw = localStorage.getItem(key);
-      return raw == null ? null : JSON.parse(raw);
-    } catch (e) { return null; }
-  },
+
+      try {
+        await bridge.initialize();
+        this._initialized = true;
+        this._language = bridge.platform.language || this._browserLanguage();
+        this._subscribeEvents();
+
+        if (bridge.advertisement.interstitialState === 'opened') {
+          this._setPlatformPaused(true);
+        }
+
+        return true;
+      } catch (err) {
+        console.warn('[Playgama] Initialization failed, using dev fallback:', err);
+        this._initialized = false;
+        this._language = this._browserLanguage();
+        return false;
+      }
+    })();
+
+    return this._ready;
+  }
+
+  get available() {
+    return this._initialized;
+  }
+
+  get isGameplayPaused() {
+    return this._isPlatformPaused || this._documentHidden;
+  }
+
+  get id() {
+    if (!this._initialized) return 'mock';
+    try { return bridge.platform.id || 'mock'; } catch { return 'mock'; }
+  }
+
+  get language() {
+    return (this._language || 'en').slice(0, 2).toLowerCase();
+  }
+
+  get payload() {
+    if (!this._initialized) return null;
+    try { return bridge.platform.payload; } catch { return null; }
+  }
+
+  get deviceType() {
+    if (!this._initialized) return 'desktop';
+    try { return bridge.device.type || 'desktop'; } catch { return 'desktop'; }
+  }
+
+  subscribePause(fn) {
+    if (typeof fn !== 'function') return () => {};
+    this._pauseListeners.add(fn);
+    fn(this.isGameplayPaused);
+    return () => this._pauseListeners.delete(fn);
+  }
+
+  setDocumentHidden(hidden) {
+    this._documentHidden = !!hidden;
+    if (this._documentHidden) audio.suspend();
+    else this._applyAudioState();
+    this._emitPause();
+  }
+
+  gameReady() {
+    this._send('game_ready');
+    return Promise.resolve();
+  }
+
+  loadingStarted() {
+    this._send('in_game_loading_started');
+  }
+
+  loadingStopped() {
+    this._send('in_game_loading_stopped');
+  }
+
+  levelStarted(level) {
+    this._send('level_started', { world: 'vein_city', level: String(level) });
+  }
+
+  levelCompleted(level) {
+    this._send('level_completed', { world: 'vein_city', level: String(level) });
+  }
+
+  levelFailed(level) {
+    this._send('level_failed', { world: 'vein_city', level: String(level) });
+  }
+
+  sendMessage(message, params) {
+    this._send(message, params);
+    return Promise.resolve();
+  }
+
+  async load(key) {
+    if (this._initialized) {
+      try {
+        const value = await bridge.storage.get(key);
+        const parsed = this._parseStored(value);
+        if (parsed !== null && parsed !== undefined) return parsed;
+      } catch {}
+    }
+
+    return this._loadLocal(key);
+  }
 
   async save(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* */ }
-    try { if (_hasBridge && sdk().storage) await sdk().storage.set(key, value); } catch (e) { /* */ }
-  },
+    this._saveLocal(key, value);
 
-  // ── advertising ─────────────────────────────────────────────────────────────
-  get isRewardedSupported() { try { return !!(_hasBridge && sdk().advertisement.isRewardedSupported); } catch (e) { return false; } },
-  get isInterstitialSupported() { try { return !!(_hasBridge && sdk().advertisement.isInterstitialSupported); } catch (e) { return false; } },
+    if (this._initialized) {
+      try {
+        await bridge.storage.set(key, JSON.stringify(value));
+        return;
+      } catch {}
+    }
+  }
 
-  // Interstitial at a natural break (level complete → menu). The SDK enforces a
-  // minimum delay (default 60s) between interstitials, so this is safe to call
-  // on every level-complete; audio is paused/resumed by the central handlers.
-  showInterstitial() {
-    try { if (_hasBridge && this.isInterstitialSupported) sdk().advertisement.showInterstitial(); } catch (e) { /* */ }
-  },
-
-  // Rewarded ad. `onReward` fires exactly once, only when the player actually
-  // earns the reward (state === 'rewarded'). Returns false if unavailable so
-  // the caller can hide / skip the offer.
-  showRewarded(onReward) {
-    if (!_hasBridge || !this.isRewardedSupported) return false;
+  async remove(key) {
     try {
-      _rewardCb = typeof onReward === 'function' ? onReward : null;
-      sdk().advertisement.showRewarded();
-      return true;
-    } catch (e) { _rewardCb = null; return false; }
-  },
+      localStorage.removeItem(`vc:${key}`);
+      localStorage.removeItem(key);
+    } catch {}
 
-  // ── leaderboards ────────────────────────────────────────────────────────────
-  get leaderboardType() { try { return _hasBridge ? sdk().leaderboards.type : 'not_available'; } catch (e) { return 'not_available'; } },
+    if (this._initialized) {
+      try { await bridge.storage.delete(key); } catch {}
+    }
+  }
 
-  get leaderboardAvailable() { return this.leaderboardType !== 'not_available'; },
+  get defaultStorageType() {
+    if (!this._initialized) return 'local_storage';
+    try { return bridge.storage.defaultType || 'local_storage'; } catch { return 'local_storage'; }
+  }
 
-  submitScore(score, leaderboardId = IDS.leaderboard) {
-    try {
-      if (_hasBridge && this.leaderboardType !== 'not_available') {
-        return sdk().leaderboards.setScore(leaderboardId, score).catch(() => {});
-      }
-    } catch (e) { /* */ }
-    return Promise.resolve();
-  },
+  get isInterstitialSupported() {
+    return this._initialized && !!bridge.advertisement.isInterstitialSupported;
+  }
 
-  // For native / native_popup boards the platform renders its own overlay.
-  showLeaderboard(leaderboardId = IDS.leaderboard) {
-    try {
-      if (_hasBridge && this.leaderboardType === 'native_popup') {
-        return sdk().leaderboards.showNativePopup(leaderboardId).catch(() => {});
-      }
-    } catch (e) { /* */ }
-    return Promise.resolve();
-  },
+  get isRewardedSupported() {
+    return this._initialized && !!bridge.advertisement.isRewardedSupported;
+  }
 
-  // For in_game boards we render our own list from these entries.
-  getLeaderboardEntries(leaderboardId = IDS.leaderboard) {
-    try {
-      if (_hasBridge && this.leaderboardType === 'in_game') {
-        return sdk().leaderboards.getEntries(leaderboardId).then(e => e || []).catch(() => []);
-      }
-    } catch (e) { /* */ }
-    return Promise.resolve([]);
-  },
+  showInterstitial(placement = IDS.interstitial) {
+    if (!this.isInterstitialSupported) return Promise.resolve();
 
-  // ── achievements ────────────────────────────────────────────────────────────
-  // Native achievements exist only on a couple of platforms (Y8, Lagged) and use
-  // dashboard-configured IDs; elsewhere this is a no-op and the in-game
-  // achievements panel (backed by the save) is the source of truth.
-  unlockAchievement(achievementId) {
-    try {
-      if (_hasBridge && sdk().achievements && sdk().achievements.isSupported) {
-        const id = this.id;
-        const options = id === 'y8'
-          ? { achievement: achievementId, achievementkey: achievementId }
-          : { achievement: achievementId };
-        return sdk().achievements.unlock(options).catch(() => {});
-      }
-    } catch (e) { /* */ }
-    return Promise.resolve();
-  },
+    return new Promise((resolve) => {
+      const onStateChanged = (state) => {
+        if (state === 'closed' || state === 'failed') {
+          bridge.advertisement.off(bridge.EVENT_NAME.INTERSTITIAL_STATE_CHANGED, onStateChanged);
+          resolve();
+        }
+      };
 
-  // ── platform-driven pause / audio (mute on overlay, minimize, ad) ───────────
-  _bindEvents() {
-    // Pause / mute the game when the platform asks (ad overlay, app switch…).
-    on('platform', 'PAUSE_STATE_CHANGED', (paused) => { paused ? audio.suspend() : audio.resume(); });
-    on('platform', 'AUDIO_STATE_CHANGED', (enabled) => { enabled ? audio.resume() : audio.suspend(); });
-
-    // Interstitial: mute while open.
-    on('advertisement', 'INTERSTITIAL_STATE_CHANGED', (state) => {
-      if (state === 'opened') audio.suspend();
-      else if (state === 'closed' || state === 'failed') audio.resume();
-    });
-
-    // Rewarded: mute while open; grant only on `rewarded`.
-    on('advertisement', 'REWARDED_STATE_CHANGED', (state) => {
-      if (state === 'opened') audio.suspend();
-      else if (state === 'rewarded') { const cb = _rewardCb; _rewardCb = null; if (cb) cb(); }
-      else if (state === 'closed' || state === 'failed') { _rewardCb = null; audio.resume(); }
+      bridge.advertisement.on(bridge.EVENT_NAME.INTERSTITIAL_STATE_CHANGED, onStateChanged);
+      bridge.advertisement.showInterstitial(placement);
     });
   }
-};
+
+  showRewarded(placement = IDS.rewarded.moves) {
+    if (!this.isRewardedSupported) return Promise.resolve({ rewarded: false });
+
+    return new Promise((resolve) => {
+      let wasRewarded = false;
+
+      const onStateChanged = (state) => {
+        if (state === 'rewarded') {
+          wasRewarded = true;
+        }
+        if (state === 'closed' || state === 'failed') {
+          bridge.advertisement.off(bridge.EVENT_NAME.REWARDED_STATE_CHANGED, onStateChanged);
+          resolve({ rewarded: wasRewarded });
+        }
+      };
+
+      bridge.advertisement.on(bridge.EVENT_NAME.REWARDED_STATE_CHANGED, onStateChanged);
+      bridge.advertisement.showRewarded(placement);
+    });
+  }
+
+  get leaderboardType() {
+    if (!this._initialized) return 'not_available';
+    try { return bridge.leaderboards.type || 'not_available'; } catch { return 'not_available'; }
+  }
+
+  get leaderboardAvailable() {
+    return this.leaderboardType !== 'not_available';
+  }
+
+  submitScore(score, leaderboardId = IDS.leaderboard) {
+    if (!this.leaderboardAvailable) return Promise.resolve();
+    try { return bridge.leaderboards.setScore(leaderboardId, score).catch(() => {}); } catch { return Promise.resolve(); }
+  }
+
+  showLeaderboard(leaderboardId = IDS.leaderboard) {
+    if (this.leaderboardType !== 'native_popup') return Promise.resolve(false);
+    try { return bridge.leaderboards.showNativePopup(leaderboardId).then(() => true).catch(() => false); } catch { return Promise.resolve(false); }
+  }
+
+  getLeaderboardEntries(leaderboardId = IDS.leaderboard) {
+    if (this.leaderboardType !== 'in_game') return Promise.resolve([]);
+    try { return bridge.leaderboards.getEntries(leaderboardId).then((entries) => entries || []).catch(() => []); } catch { return Promise.resolve([]); }
+  }
+
+  unlockAchievement(achievementId) {
+    if (!this._initialized) return Promise.resolve();
+    try {
+      if (!bridge.achievements?.isSupported) return Promise.resolve();
+
+      let options = null;
+      if (this.id === 'y8') {
+        options = { achievement: achievementId, achievementkey: achievementId };
+      } else if (this.id === 'lagged') {
+        options = { achievement: achievementId };
+      }
+
+      if (!options) return Promise.resolve();
+      return bridge.achievements.unlock(options).catch(() => {});
+    } catch {
+      return Promise.resolve();
+    }
+  }
+
+  get player() {
+    if (!this._initialized) {
+      return {
+        isAuthorizationSupported: false,
+        isAuthorized: false,
+        id: null,
+        name: null,
+        photos: []
+      };
+    }
+
+    try {
+      return {
+        isAuthorizationSupported: !!bridge.player.isAuthorizationSupported,
+        isAuthorized: !!bridge.player.isAuthorized,
+        id: bridge.player.id || null,
+        name: bridge.player.name || null,
+        photos: bridge.player.photos || []
+      };
+    } catch {
+      return {
+        isAuthorizationSupported: false,
+        isAuthorized: false,
+        id: null,
+        name: null,
+        photos: []
+      };
+    }
+  }
+
+  authorizePlayer(options = {}) {
+    if (!this._initialized) return Promise.resolve(false);
+    try {
+      if (!bridge.player.isAuthorizationSupported) return Promise.resolve(false);
+      return bridge.player.authorize(options).then(() => true).catch(() => false);
+    } catch {
+      return Promise.resolve(false);
+    }
+  }
+
+  _send(message, params) {
+    if (!this._initialized) return;
+    try { bridge.platform.sendMessage(message, params); } catch {}
+  }
+
+  _subscribeEvents() {
+    bridge.platform.on(bridge.EVENT_NAME.PAUSE_STATE_CHANGED, (isPaused) => {
+      this._setPlatformPaused(isPaused);
+    });
+
+    bridge.platform.on(bridge.EVENT_NAME.AUDIO_STATE_CHANGED, (isEnabled) => {
+      this._audioEnabled = isEnabled;
+      this._applyAudioState();
+    });
+  }
+
+  _setPlatformPaused(isPaused) {
+    this._isPlatformPaused = isPaused;
+    this._applyAudioState();
+    this._emitPause();
+  }
+
+  _applyAudioState() {
+    if (this.isGameplayPaused || !this._audioEnabled) audio.suspend();
+    else audio.resume();
+  }
+
+  _emitPause() {
+    const paused = this.isGameplayPaused;
+    this._pauseListeners.forEach((fn) => {
+      try { fn(paused); } catch {}
+    });
+  }
+
+  _saveLocal(key, value) {
+    try { localStorage.setItem(`vc:${key}`, JSON.stringify(value)); } catch {}
+  }
+
+  _loadLocal(key) {
+    try {
+      const raw = localStorage.getItem(`vc:${key}`) ?? localStorage.getItem(key);
+      return this._parseStored(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  _parseStored(value) {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== 'string') return value;
+    try { return JSON.parse(value); } catch { return value; }
+  }
+
+  _browserLanguage() {
+    return ((typeof navigator !== 'undefined' && navigator.language) || 'en').slice(0, 2).toLowerCase();
+  }
+}
+
+export const platform = new PlaygamaPlatform();

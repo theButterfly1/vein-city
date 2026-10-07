@@ -16,7 +16,7 @@ import { t } from '../../i18n/i18n.js';
 
 function engineReducer(state, action) { return reduce(state, action); }
 
-export default function PuzzleScreen({ level, onComplete, onRetry, onExit }) {
+export default function PuzzleScreen({ level, paused = false, onComplete, onRetry, onExit }) {
   const game = useGame();
   const layout = useMemo(() => generateLevel(level), [level]);
   const [st, dispatch] = useReducer(engineReducer, layout, initEngine);
@@ -104,12 +104,13 @@ export default function PuzzleScreen({ level, onComplete, onRetry, onExit }) {
   }, [st.moves, st.cells]);
   useEffect(() => {
     const id = setInterval(() => {
-      if (!st.solved && Date.now() - lastActionRef.current > 60000) setHintReady(true);
+      if (!paused && !st.solved && Date.now() - lastActionRef.current > 60000) setHintReady(true);
     }, 2000);
     return () => clearInterval(id);
-  }, [st.solved]);
+  }, [paused, st.solved]);
 
   const useHint = () => {
+    if (paused) return;
     const hidden = st.cells.filter(c => c.network && !c.revealed && !c.locked);
     if (hidden.length) {
       const pick = hidden[0];
@@ -123,6 +124,7 @@ export default function PuzzleScreen({ level, onComplete, onRetry, onExit }) {
   };
 
   const onTap = (i) => {
+    if (paused) return;
     audio.init();
     if (st.solved) return;
     if (ventMode) {
@@ -136,6 +138,7 @@ export default function PuzzleScreen({ level, onComplete, onRetry, onExit }) {
   };
 
   const booster = (kind) => {
+    if (paused) return;
     if (st.solved) return;
     if ((game.save.boosters[kind] || 0) <= 0) { audio.playDenied(); say('NONE LEFT — earned by solving levels', 'rust'); return; }
     if (kind === 'vent') { setVentMode(v => !v); return; }
@@ -145,18 +148,23 @@ export default function PuzzleScreen({ level, onComplete, onRetry, onExit }) {
   };
 
   const finish = () => {
+    if (paused) return;
     game.completeLevel(level.id, st.stars);
+    platform.levelCompleted(level.id);
     onComplete(st.stars);
   };
 
   // Rewarded ad: a bonus +5 moves on top of retry/boosters (never required to
   // continue — retry is always free). Grants only when the player earns it.
-  const watchAdForMoves = () => {
-    const started = platform.showRewarded(() => {
+  const watchAdForMoves = async () => {
+    if (paused) return;
+    const { rewarded } = await platform.showRewarded();
+    if (rewarded) {
       dispatch({ type: 'ADD_MOVES' });
       say(t('ads.rewardMoves'), 'gold');
-    });
-    if (!started) say('AD UNAVAILABLE', 'rust');
+    } else {
+      say('AD UNAVAILABLE', 'rust');
+    }
   };
 
   // grid sizing: fit available height in landscape
