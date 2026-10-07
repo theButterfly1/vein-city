@@ -44,8 +44,7 @@ class AudioEngine {
   }
 
   // System-level mute, independent of the player's SOUND preference. Used while
-  // an ad is on screen, the platform reports a pause, or the tab is hidden —
-  // required by certification (sound must stop during ads / when minimized).
+  // the tab is hidden (sound must stop when minimized).
   suspend() {
     this._suspended = true;
     try { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); } catch (e) { /* */ }

@@ -9,17 +9,14 @@ import MainMenu from './components/menu/MainMenu.jsx';
 import PuzzleScreen from './components/puzzle/PuzzleScreen.jsx';
 import ComicScreen from './components/comic/ComicScreen.jsx';
 import OrientationGate from './components/ui/OrientationGate.jsx';
+import Cliffhanger from './components/ui/Cliffhanger.jsx';
 import { getLevel, ACTS } from './data/levels.js';
 import { STORY, ENDING } from './data/story.js';
 import { audio } from './audio/AudioEngine.js';
-import { platform } from './platform/bridge.js';
 
 function Flow() {
   const game = useGame();
   const [screen, setScreen] = useState({ name: 'menu' });
-  const [paused, setPaused] = useState(platform.isGameplayPaused);
-
-  useEffect(() => platform.subscribePause(setPaused), []);
 
   // audio lifecycle: heartbeat + drone live on the menu
   useEffect(() => {
@@ -45,12 +42,7 @@ function Flow() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen.name, screen.levelId]);
 
-  useEffect(() => {
-    if (screen.name === 'puzzle') platform.levelStarted(screen.levelId);
-  }, [screen.name, screen.levelId]);
-
   const startLevel = useCallback((id) => {
-    if (platform.isGameplayPaused) return;
     const lvl = getLevel(id);
     const beats = STORY[id];
     if (beats?.before?.length) {
@@ -61,37 +53,32 @@ function Flow() {
   }, []);
 
   const onComicDone = useCallback(() => {
-    if (platform.isGameplayPaused) return;
-    const { phase, levelId, stars } = screen;
+    const { phase, levelId, endOfDay } = screen;
     game.markComicSeen(`${levelId}:${phase}`);
     if (phase === 'before') {
       setScreen({ name: 'puzzle', levelId });
     } else {
-      // Natural break after a solved level → interstitial (SDK throttles to a
-      // 60s minimum; audio is paused by the central ad handler).
-      platform.showInterstitial();
-      setScreen({ name: 'menu' });
+      setScreen(endOfDay ? { name: 'cliff', levelId } : { name: 'menu' });
     }
   }, [screen, game]);
 
-  const onPuzzleComplete = useCallback((stars) => {
-    if (platform.isGameplayPaused) return;
+  // endOfDay: that was the last town open today → cliffhanger, then the lock screen
+  const onPuzzleComplete = useCallback((stars, endOfDay) => {
     const id = screen.levelId;
     const beats = STORY[id];
     if (beats?.after?.length) {
-      setScreen({ name: 'comic', phase: 'after', levelId: id, panels: beats.after, stars });
+      setScreen({ name: 'comic', phase: 'after', levelId: id, panels: beats.after, stars, endOfDay });
     } else {
-      setScreen({ name: 'menu' });
+      setScreen(endOfDay ? { name: 'cliff', levelId: id } : { name: 'menu' });
     }
   }, [screen]);
 
   if (screen.name === 'menu') {
-    return (
-      <>
-        <MainMenu onPlayLevel={startLevel} paused={paused} />
-        {paused && <div className="platform-pause-veil" aria-hidden="true" />}
-      </>
-    );
+    return <MainMenu onPlayLevel={startLevel} />;
+  }
+
+  if (screen.name === 'cliff') {
+    return <Cliffhanger levelId={screen.levelId} onDone={() => setScreen({ name: 'menu' })} />;
   }
 
   if (screen.name === 'comic') {
@@ -103,39 +90,29 @@ function Flow() {
         ? (screen.stars === 3 ? ENDING.threeStar : ENDING.normal)
         : `LEVEL ${String(lvl.id).padStart(2, '0')} — SOLVED`;
     return (
-      <>
-        <ComicScreen
-          key={`${screen.levelId}-${screen.phase}`}
-          panels={screen.panels}
-          levelId={screen.levelId}
-          phase={screen.phase}
-          title={lvl.name.toUpperCase()}
-          subtitle={sub}
-          onDone={onComicDone}
-        />
-        {paused && <div className="platform-pause-veil" aria-hidden="true" />}
-      </>
+      <ComicScreen
+        key={`${screen.levelId}-${screen.phase}`}
+        panels={screen.panels}
+        levelId={screen.levelId}
+        phase={screen.phase}
+        title={lvl.name.toUpperCase()}
+        subtitle={sub}
+        onDone={onComicDone}
+      />
     );
   }
 
   if (screen.name === 'puzzle') {
     const lvl = getLevel(screen.levelId);
     return (
-      <>
-        <PuzzleScreen
-          key={screen.levelId + ':' + (screen.retry || 0)}
-          level={lvl}
-          paused={paused}
-          onComplete={onPuzzleComplete}
-          onRetry={() => { if (!platform.isGameplayPaused) setScreen(s => ({ ...s, retry: (s.retry || 0) + 1 })); }}
-          onExit={() => {
-            if (platform.isGameplayPaused) return;
-            platform.levelFailed(screen.levelId);
-            setScreen(s => (s.name === 'puzzle' ? { name: 'menu' } : s));
-          }}
-        />
-        {paused && <div className="platform-pause-veil" aria-hidden="true" />}
-      </>
+      <PuzzleScreen
+        key={screen.levelId + ':' + (screen.retry || 0)}
+        level={lvl}
+        retries={screen.retry || 0}
+        onComplete={onPuzzleComplete}
+        onRetry={() => setScreen(s => ({ ...s, retry: (s.retry || 0) + 1 }))}
+        onExit={() => setScreen(s => (s.name === 'puzzle' ? { name: 'menu' } : s))}
+      />
     );
   }
 

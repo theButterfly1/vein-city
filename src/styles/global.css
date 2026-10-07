@@ -357,12 +357,6 @@ button:focus-visible { outline: 2px dashed var(--gold-bright); outline-offset: 2
 }
 .oom-banner button em { font-style: normal; opacity: 0.7; }
 .oom-banner button:hover { background: rgba(196, 146, 42, 0.15); }
-.oom-banner button.oom-ad {
-  border-color: var(--gold-bright); color: var(--ink);
-  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
-  font-weight: 700; box-shadow: 0 0 14px rgba(232, 184, 75, 0.35);
-}
-.oom-banner button.oom-ad:hover { filter: brightness(1.08); background: linear-gradient(180deg, var(--gold-bright), var(--gold)); }
 
 /* booster tray */
 .tray {
@@ -537,14 +531,6 @@ button:focus-visible { outline: 2px dashed var(--gold-bright); outline-offset: 2
 .rotate-title { font-weight: 700; letter-spacing: 0.3em; font-size: 17px; color: var(--gold); }
 .rotate-sub { font-family: var(--font-type); font-size: 12px; color: var(--paper-dim); }
 
-.platform-pause-veil {
-  position: fixed;
-  inset: 0;
-  z-index: 950;
-  background: transparent;
-  pointer-events: all;
-  touch-action: none;
-}
 
 /* compact landscape phones */
 @media (max-height: 460px) {
@@ -559,3 +545,33 @@ button:focus-visible { outline: 2px dashed var(--gold-bright); outline-offset: 2
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ── daily unlock / reviewer / cliffhanger / city voice ── */
+.reviewer-skip {
+  position: absolute; top: 58px; right: 16px; z-index: 30;
+  min-height: 40px; padding: 8px 14px;
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.12em;
+  color: var(--ink); background: var(--gold-bright); border: 2px dashed var(--ink); border-radius: 4px;
+  cursor: pointer;
+}
+.lc-replay { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; color: var(--rust); }
+.result-voice {
+  margin: 10px 0 4px; min-height: 2.6em;
+  font-family: var(--font-type); font-style: italic; color: var(--rust);
+  animation: voice-in .6s ease-out;
+}
+.result-voice p { margin: 0 0 2px; }
+@keyframes voice-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.result-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.cliffhanger {
+  position: fixed; inset: 0; z-index: 900;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+  padding: 24px 16px; background: var(--ink); color: var(--paper); text-align: center; cursor: pointer;
+}
+.cliffhanger-line {
+  max-width: 34ch; margin: 0;
+  font-family: var(--font-type); font-size: clamp(18px, 3.4vw, 28px); line-height: 1.45;
+  animation: voice-in 1.4s ease-out;
+}
+.cliffhanger-sign { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.3em; color: var(--gold); }
+.cliffhanger-tap { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em; color: var(--paper-dim); opacity: .7; }

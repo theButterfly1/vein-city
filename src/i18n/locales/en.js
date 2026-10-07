@@ -24,11 +24,6 @@ export default {
   // ── comic ────────────────────────────────────────────────────────────────────
   'ui.skip': 'SKIP ▸▸',
 
-  // ── advertising ──────────────────────────────────────────────────────────────
-  'ads.outOfMoves': 'NOT ENOUGH MOVES',
-  'ads.watchForMoves': '▸ WATCH AD · +5 MOVES',
-  'ads.rewardMoves': '+5 MOVES',
-
   // ── achievements ─────────────────────────────────────────────────────────────
   'ach.title': 'ACHIEVEMENTS',
   'ach.unlocked': 'ACHIEVEMENT — {name}',

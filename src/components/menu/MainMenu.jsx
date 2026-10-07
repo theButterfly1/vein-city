@@ -11,8 +11,9 @@ import { useGame } from '../../state/GameContext.jsx';
 import { LEVELS, ACTS, getLevel } from '../../data/levels.js';
 import { audio } from '../../audio/AudioEngine.js';
 import { MENU_ART } from '../../assets/images.js';
+import { msToMidnight, formatCountdown } from '../../game/daily.js';
 
-export default function MainMenu({ onPlayLevel, paused = false }) {
+export default function MainMenu({ onPlayLevel }) {
   const game = useGame();
   const [revealQueue, setRevealQueue] = useState([]);
   const [revealedNow, setRevealedNow] = useState([]); // ids already animated this visit
@@ -23,6 +24,14 @@ export default function MainMenu({ onPlayLevel, paused = false }) {
 
   const completed = game.save.completed;
   const nextId = game.nextLevelId();
+  const lockedToday = nextId !== null && nextId > game.townCap; // next town opens tomorrow
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!lockedToday) return;
+    const id = setInterval(() => setTick(n => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [lockedToday]);
+  const wakesIn = `THE CITY WAKES IN ${formatCountdown(msToMidnight())}`;
 
   // Districts already lit (exclude ones still waiting in the reveal queue)
   const pendingSet = new Set([...game.save.pendingReveals, ...revealQueue]);
@@ -49,12 +58,13 @@ export default function MainMenu({ onPlayLevel, paused = false }) {
   };
 
   const onPickDistrict = (id) => {
-    if (paused) return;
     audio.init();
-    if (id === nextId || completed[id]) {
+    if (completed[id] || game.isUnlocked(id)) {
       onPlayLevel(id);
-    } else if (game.isUnlocked(id)) {
-      onPlayLevel(id);
+    } else if (id > game.townCap) {
+      setBanner(wakesIn);
+      setTimeout(() => setBanner(null), 2200);
+      audio.playDenied();
     } else {
       setBanner('THIS BLOCK IS STILL DARK — solve the marked district first');
       setTimeout(() => setBanner(null), 2200);
@@ -69,7 +79,6 @@ export default function MainMenu({ onPlayLevel, paused = false }) {
     <div
       className="menu-screen"
       onPointerDown={() => {
-        if (paused) return;
         audio.init();
         audio.setEnabled(game.save.sound);
         audio.startHeartbeat(0.2);
@@ -78,7 +87,7 @@ export default function MainMenu({ onPlayLevel, paused = false }) {
     >
       <TownView
         litIds={litIds}
-        nextId={nextId}
+        nextId={lockedToday ? null : nextId}
         revealQueue={revealQueue}
         onRevealDone={onRevealDone}
         onPickDistrict={onPickDistrict}
@@ -105,13 +114,17 @@ export default function MainMenu({ onPlayLevel, paused = false }) {
 
       {banner && <div className="menu-banner">{banner}</div>}
 
+      <button className="reviewer-skip" onClick={() => { audio.playUI(); game.skipDay(); }}>
+        REVIEWER: SKIP TO TOMORROW ▸
+      </button>
+
       <footer className="menu-bar">
-        <button className="menu-btn primary" onClick={() => { if (paused) return; audio.init(); audio.playUI(); nextId ? onPlayLevel(nextId) : setShowLevels(true); }}>
-          {allDone ? 'REPLAY BLOCKS' : `▸ LEVEL ${String(nextId).padStart(2, '0')} — ${getLevel(nextId).name.toUpperCase()}`}
+        <button className="menu-btn primary" onClick={() => { audio.init(); audio.playUI(); nextId && !lockedToday ? onPlayLevel(nextId) : setShowLevels(true); }}>
+          {allDone ? 'REPLAY BLOCKS' : lockedToday ? wakesIn : `▸ LEVEL ${String(nextId).padStart(2, '0')} — ${getLevel(nextId).name.toUpperCase()}`}
         </button>
-        <button className="menu-btn" onClick={() => { if (paused) return; audio.init(); audio.playUI(); setShowLevels(true); }}>DISTRICTS</button>
-        <button className="menu-btn" onClick={() => { if (paused) return; audio.init(); audio.playUI(); setShowJournal(true); }}>JOURNAL</button>
-        <button className="menu-btn" onClick={() => { if (paused) return; game.setSound(!game.save.sound); audio.init(); audio.setEnabled(!game.save.sound); audio.playUI(); }}>
+        <button className="menu-btn" onClick={() => { audio.init(); audio.playUI(); setShowLevels(true); }}>DISTRICTS</button>
+        <button className="menu-btn" onClick={() => { audio.init(); audio.playUI(); setShowJournal(true); }}>JOURNAL</button>
+        <button className="menu-btn" onClick={() => { game.setSound(!game.save.sound); audio.init(); audio.setEnabled(!game.save.sound); audio.playUI(); }}>
           {game.save.sound ? 'SOUND ◉' : 'SOUND ○'}
         </button>
       </footer>
@@ -136,11 +149,13 @@ export default function MainMenu({ onPlayLevel, paused = false }) {
                     key={l.id}
                     className={`level-cell ${done ? 'done' : ''} ${!unlocked ? 'locked' : ''} ${l.id === nextId ? 'next' : ''}`}
                     disabled={!unlocked}
-                    onClick={() => { if (paused) return; audio.playUI(); setShowLevels(false); onPlayLevel(l.id); }}
+                    onClick={() => { audio.playUI(); setShowLevels(false); onPlayLevel(l.id); }}
                   >
                     <span className="lc-num">{String(l.id).padStart(2, '0')}</span>
                     <span className="lc-name">{l.name}</span>
-                    <span className="lc-stars">{done ? '★'.repeat(done) : unlocked ? 'OPEN' : '🔒'}</span>
+                    <span className="lc-stars">{done ? '★'.repeat(done) + '☆'.repeat(3 - done) : unlocked ? 'OPEN' : '🔒'}</span>
+                    {done > 0 && done < 3 && <span className="lc-replay">REPLAY FOR 3 ★</span>}
+                    {!done && l.id === game.townCap + 1 && lockedToday && <span className="lc-replay">{formatCountdown(msToMidnight())}</span>}
                   </button>
                 );
               })}

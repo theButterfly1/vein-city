@@ -1,6 +1,6 @@
 // ─── Achievements ────────────────────────────────────────────────────────────
 // In-game achievements (always tracked in the save so the panel works on every
-// platform) plus a best-effort native unlock via the Bridge where supported.
+// platform).
 // `id` is the stored/native id; the UI label/description come from i18n keys
 // `ach.<id>` and `ach.<id>.desc`. `test(save)` decides when it unlocks.
 

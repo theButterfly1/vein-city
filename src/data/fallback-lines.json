@@ -1,0 +1,30 @@
+{
+  "_note": "Scripted city-voice lines used when the AI call fails or times out. Keyed by stars earned. Max 25 words.",
+  "3": [
+    "You touched every vein exactly where it wanted touching. I noticed. I always notice.",
+    "Clean. Not one wasted move. You route as if you remember me.",
+    "So precise. You are beginning to think in my shape.",
+    "Flawless. The pipes warmed before your hand reached them.",
+    "You barely woke the stone. Careful, engineer. I could grow used to you.",
+    "Perfect flow. Somewhere beneath you, something old breathes easier.",
+    "You read me like a letter you wrote yourself."
+  ],
+  "2": [
+    "Good. Not perfect. I felt you hesitate near the cold mains.",
+    "The water runs. You wandered a little first. I let you.",
+    "Close. You opened stones I did not need opened. They remember.",
+    "You found the way. Next time, find it sooner. I am patient, not endless.",
+    "Steady enough. A few wrong turns. My streets keep a record of every one.",
+    "The district breathes again. Your route still tastes of doubt.",
+    "Almost my rhythm. Listen harder and you will hear where you slipped."
+  ],
+  "1": [
+    "You got there. Bruised, but there. I have survived worse hands than yours.",
+    "So many stones turned over. You are loud, engineer. Others may hear.",
+    "It flows. Barely. Come back when you can hear me properly.",
+    "Clumsy, but you did not give up. I remember that more than mistakes.",
+    "You tore half the street open to find one vein. I felt every tile.",
+    "Late and frantic. Still, the light reached the end. So did you.",
+    "You stumbled through me. I caught you. Do not make me do it often."
+  ]
+}

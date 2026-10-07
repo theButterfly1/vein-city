@@ -59,3 +59,6 @@ export function typeForMask(mask) {
 }
 
 export const SAVE_KEY = 'veincity_save_v1';
+
+// Daily unlock: towns open on the first calendar day; then one more per day.
+export const DAY_ONE_TOWNS = 3;

@@ -5,7 +5,6 @@
 // return strings, arrays, or objects (used by the comic story data).
 
 import { useState, useEffect } from 'react';
-import { platform } from '../platform/bridge.js';
 
 import en from './locales/en.js';
 import ru from './locales/ru.js';
@@ -35,12 +34,13 @@ export const supported = (code) => SUPPORTED.includes(code);
 export const getLanguage = () => current;
 export const subscribe = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 
-// Resolve the boot language: saved choice → platform/browser → English.
+// Resolve the boot language: saved choice → browser → English.
 export function initLanguage(savedLang) {
   let code = savedLang;
   if (!supported(code)) {
-    const plat = platform.language;
-    code = supported(plat) ? plat : 'en';
+    let nav = 'en';
+    try { nav = navigator.language.slice(0, 2).toLowerCase(); } catch (e) { /* */ }
+    code = supported(nav) ? nav : 'en';
   }
   current = code;
   try { document.documentElement.lang = code; } catch (e) { /* */ }

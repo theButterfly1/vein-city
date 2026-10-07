@@ -11,12 +11,12 @@ import { audio } from '../../audio/AudioEngine.js';
 import { useGame } from '../../state/GameContext.jsx';
 import { JOURNAL, RELICS, HINTS } from '../../data/story.js';
 import { ACTS } from '../../data/levels.js';
-import { platform } from '../../platform/bridge.js';
-import { t } from '../../i18n/i18n.js';
+import { cityVoice } from '../../platform/cityVoice.js';
+import { track } from '../../platform/analytics.js';
 
 function engineReducer(state, action) { return reduce(state, action); }
 
-export default function PuzzleScreen({ level, paused = false, onComplete, onRetry, onExit }) {
+export default function PuzzleScreen({ level, retries = 0, onComplete, onRetry, onExit }) {
   const game = useGame();
   const layout = useMemo(() => generateLevel(level), [level]);
   const [st, dispatch] = useReducer(engineReducer, layout, initEngine);
@@ -28,6 +28,8 @@ export default function PuzzleScreen({ level, paused = false, onComplete, onRetr
   const [hintReady, setHintReady] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [voice, setVoice] = useState(null);
+  const startRef = useRef(Date.now());
   const lastActionRef = useRef(Date.now());
   const toastTimer = useRef(null);
 
@@ -97,6 +99,24 @@ export default function PuzzleScreen({ level, paused = false, onComplete, onRetr
     }
   }, [st.solved]);
 
+  // City voice: request on solve so the line is usually ready by the dossier.
+  useEffect(() => {
+    if (!st.solved) return;
+    let live = true;
+    cityVoice({
+      town: level.id,
+      stars: st.stars,
+      movesLeft: st.moves,
+      movesTotal: st.movesTotal,
+      revealed: st.cells.filter(c => c.revealed).length,
+      tiles: st.cells.length,
+      seconds: Math.round((Date.now() - startRef.current) / 1000),
+      retries
+    }).then(lines => { if (live) setVoice(lines); });
+    return () => { live = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [st.solved]);
+
   // Mara's Intuition — inactivity timer (F-04)
   useEffect(() => {
     lastActionRef.current = Date.now();
@@ -104,13 +124,12 @@ export default function PuzzleScreen({ level, paused = false, onComplete, onRetr
   }, [st.moves, st.cells]);
   useEffect(() => {
     const id = setInterval(() => {
-      if (!paused && !st.solved && Date.now() - lastActionRef.current > 60000) setHintReady(true);
+      if (!st.solved && Date.now() - lastActionRef.current > 60000) setHintReady(true);
     }, 2000);
     return () => clearInterval(id);
-  }, [paused, st.solved]);
+  }, [st.solved]);
 
   const useHint = () => {
-    if (paused) return;
     const hidden = st.cells.filter(c => c.network && !c.revealed && !c.locked);
     if (hidden.length) {
       const pick = hidden[0];
@@ -124,7 +143,6 @@ export default function PuzzleScreen({ level, paused = false, onComplete, onRetr
   };
 
   const onTap = (i) => {
-    if (paused) return;
     audio.init();
     if (st.solved) return;
     if (ventMode) {
@@ -138,7 +156,6 @@ export default function PuzzleScreen({ level, paused = false, onComplete, onRetr
   };
 
   const booster = (kind) => {
-    if (paused) return;
     if (st.solved) return;
     if ((game.save.boosters[kind] || 0) <= 0) { audio.playDenied(); say('NONE LEFT — earned by solving levels', 'rust'); return; }
     if (kind === 'vent') { setVentMode(v => !v); return; }
@@ -147,25 +164,12 @@ export default function PuzzleScreen({ level, paused = false, onComplete, onRetr
     if (kind === 'moves') dispatch({ type: 'ADD_MOVES' });
   };
 
-  const finish = () => {
-    if (paused) return;
-    game.completeLevel(level.id, st.stars);
-    platform.levelCompleted(level.id);
-    onComplete(st.stars);
+  const record = () => {
+    track('town_complete', { town: level.id, stars: st.stars, retries });
+    return game.completeLevel(level.id, st.stars); // true → last town open today
   };
-
-  // Rewarded ad: a bonus +5 moves on top of retry/boosters (never required to
-  // continue — retry is always free). Grants only when the player earns it.
-  const watchAdForMoves = async () => {
-    if (paused) return;
-    const { rewarded } = await platform.showRewarded();
-    if (rewarded) {
-      dispatch({ type: 'ADD_MOVES' });
-      say(t('ads.rewardMoves'), 'gold');
-    } else {
-      say('AD UNAVAILABLE', 'rust');
-    }
-  };
+  const finish = () => onComplete(st.stars, record());
+  const replayForThree = () => { record(); onRetry(); };
 
   // grid sizing: fit available height in landscape
   const cellPx = `min(calc((100vh - 130px) / ${layout.h}), calc((100vw - 320px) / ${layout.w}), 72px)`;
@@ -231,9 +235,6 @@ export default function PuzzleScreen({ level, paused = false, onComplete, onRetr
         {outOfMoves && (
           <div className="oom-banner">
             <span>OUT OF MOVES — rotation is still free</span>
-            {platform.isRewardedSupported && (
-              <button className="oom-ad" onClick={watchAdForMoves}>{t('ads.watchForMoves')}</button>
-            )}
             <button onClick={() => booster('moves')}>+5 MOVES <em>{game.save.boosters.moves}</em></button>
             <button onClick={onRetry}>RETRY ↻</button>
           </div>
@@ -261,13 +262,17 @@ export default function PuzzleScreen({ level, paused = false, onComplete, onRetr
             <div className="result-stars">
               {[1, 2, 3].map(s => <span key={s} className={`star ${s <= st.stars ? 'on' : ''}`}>★</span>)}
             </div>
+            {voice && <div className="result-voice">{voice.map(l => <p key={l}>{l}</p>)}</div>}
             <div className="result-eff">PULSE INTENSITY — {efficiency}% · {st.moves} MOVES SPARED</div>
             <div className="result-journal">
               <div className="rj-label">TORN PAGE — MARA'S JOURNAL · ENTRY {level.id}</div>
               <p>“{JOURNAL[level.id]}”</p>
             </div>
             <div className="result-relic">RELIC FRAGMENT — {RELICS[level.id].name}</div>
-            <button className="result-continue" onClick={finish}>CONTINUE ▸</button>
+            <div className="result-actions">
+              {st.stars < 3 && <button className="result-continue ghost" onClick={replayForThree}>REPLAY FOR 3 ★</button>}
+              <button className="result-continue" onClick={finish}>CONTINUE ▸</button>
+            </div>
           </div>
         </div>
       )}
