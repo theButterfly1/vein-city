@@ -88,7 +88,7 @@ vein-city/
 | **Reviewer mode** — the **REVIEWER: SKIP TO TOMORROW** button (menu, top-right) advances the day by one; `?reviewer=1` opens all 30 towns. | `components/menu/MainMenu.jsx` |
 | **Cliffhanger** — after the last town open today, the city teases tomorrow. Edit the lines in `data/cliffhangers.json`. | `components/ui/Cliffhanger.jsx` |
 | **Stars** — 1–3 per town from moves left vs. the level's slack above the minimum solve cost; best result saved; *Replay for 3 ★* on the dossier and the districts grid. | `game/engine.js` (`starRating`) |
-| **City voice** — after each town, `claude-haiku-4-5` via the `/api/city-voice` serverless function (key server-side only, 10 req/min per IP, `max_tokens` 80, 4 s client timeout). Any failure → scripted lines in `data/fallback-lines.json`. | `api/city-voice.js` · `platform/cityVoice.js` |
+| **City voice** — after each town, OpenAI (`gpt-4o-mini` by default; set `OPENAI_MODEL` to change) via the `/api/city-voice` serverless function (key server-side only, 10 req/min per IP, `max_tokens` 80, 4 s client timeout). Any failure → scripted lines in `data/fallback-lines.json`. | `api/city-voice.js` · `platform/cityVoice.js` |
 | **Analytics** — `session_start`, `town_complete`, `day_return`, `ai_line_shown`, `ai_fallback_used` logged to the console as `[analytics]`. | `platform/analytics.js` |
 
 ## Shipping
@@ -96,7 +96,7 @@ vein-city/
 ### One-click public link — Vercel (recommended; runs the city-voice function)
 1. Push the repo to GitHub.
 2. [vercel.com/new](https://vercel.com/new) → import the repo. Vercel detects Vite (build `npm run build`, output `dist`) and turns `api/` into serverless functions.
-3. Project → Settings → Environment Variables → add `ANTHROPIC_API_KEY` (Production + Preview). Never prefix it with `VITE_`.
+3. Project → Settings → Environment Variables → add `OPENAI_API_KEY` (Production + Preview). Never prefix it with `VITE_`.
 4. Deploy. Share `https://<project>.vercel.app` — and `https://<project>.vercel.app/?reviewer=1` for reviewers.
 
 Without the key, or on any static host, the game still works: the city voice uses its scripted lines. To try the function locally: `npx vercel dev` with a `.env` holding the key (`.env` is git-ignored).

@@ -1,12 +1,12 @@
 // ─── /api/city-voice — Vercel serverless function ───────────────────────────
-// The living city reacts to how a town was played. ANTHROPIC_API_KEY lives only
-// in the server environment. The client sends numbers only (no free text), so
-// nothing the player types can reach the prompt.
+// The living city reacts to how a town was played, via OpenAI Chat Completions.
+// OPENAI_API_KEY lives only in the server environment. The client sends numbers
+// only (no free text), so nothing the player types can reach the prompt.
 
-import Anthropic from '@anthropic-ai/sdk';
 import { LEVELS } from '../src/data/levels.js';
 
-const client = new Anthropic({ timeout: 3500, maxRetries: 0 }); // client aborts at 4 s
+const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini'; // fast, non-reasoning
+const UPSTREAM_TIMEOUT_MS = 3500;                        // the game gives up at 4 s
 
 const SYSTEM = `You are Vein City: a living, ancient city. You speak to the engineer who is learning your veins, the pipes beneath your streets. React to how they just restored one of your districts.
 Tone: noir, intimate, slightly unsettling, never cheesy.
@@ -34,6 +34,7 @@ export default async function handler(req, res) {
 
   const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim();
   if (rateLimited(ip)) return res.status(429).json({ error: 'rate_limited' });
+  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'not_configured' });
 
   const b = req.body || {};
   const town = int(b.town, 1, 30);
@@ -46,25 +47,35 @@ Time taken: ${int(b.seconds, 0, 86400)} seconds. Failed attempts before this one
 Speak to the engineer.`;
 
   try {
-    const msg = await client.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 80,
-      system: SYSTEM,
-      messages: [{ role: 'user', content: play }]
+    const upstream = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_completion_tokens: 80,
+        messages: [
+          { role: 'system', content: SYSTEM },
+          { role: 'user', content: play }
+        ]
+      }),
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
     });
-    if (msg.stop_reason === 'refusal') return res.status(502).json({ error: 'refused' });
+    if (upstream.status === 429) return res.status(503).json({ error: 'upstream_busy' });
+    if (!upstream.ok) return res.status(502).json({ error: 'upstream_error', status: upstream.status });
 
-    const words = msg.content
-      .filter(block => block.type === 'text')
-      .map(block => block.text)
-      .join('\n')
+    const message = (await upstream.json()).choices?.[0]?.message;
+    if (message?.refusal) return res.status(502).json({ error: 'refused' });
+
+    const lines = String(message?.content || '')
       .replace(/["“”]/g, '')
       .split('\n').map(l => l.trim()).filter(Boolean).slice(0, 2);
-    if (!words.length) return res.status(502).json({ error: 'empty' });
-    return res.status(200).json({ lines: words });
+    if (!lines.length) return res.status(502).json({ error: 'empty' });
+    return res.status(200).json({ lines });
   } catch (err) {
-    if (err instanceof Anthropic.RateLimitError) return res.status(503).json({ error: 'upstream_busy' });
-    if (err instanceof Anthropic.APIError) return res.status(502).json({ error: 'upstream_error', status: err.status });
-    return res.status(500).json({ error: 'internal' });
+    const timedOut = err.name === 'TimeoutError' || err.name === 'AbortError';
+    return res.status(timedOut ? 504 : 500).json({ error: timedOut ? 'upstream_timeout' : 'internal' });
   }
 }
