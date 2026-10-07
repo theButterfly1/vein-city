@@ -114,10 +114,6 @@ export default function MainMenu({ onPlayLevel }) {
 
       {banner && <div className="menu-banner">{banner}</div>}
 
-      <button className="reviewer-skip" onClick={() => { audio.playUI(); game.skipDay(); }}>
-        REVIEWER: SKIP TO TOMORROW ▸
-      </button>
-
       <footer className="menu-bar">
         <button className="menu-btn primary" onClick={() => { audio.init(); audio.playUI(); nextId && !lockedToday ? onPlayLevel(nextId) : setShowLevels(true); }}>
           {allDone ? 'REPLAY BLOCKS' : lockedToday ? wakesIn : `▸ LEVEL ${String(nextId).padStart(2, '0')} — ${getLevel(nextId).name.toUpperCase()}`}

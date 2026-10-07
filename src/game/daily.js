@@ -3,7 +3,7 @@
 //   cap     — highest town id open (1..cap playable)
 //   capDate — local date the cap town was first solved; the NEXT calendar day
 //             opens exactly one more town, however many days were missed
-//   shift   — reviewer "skip to tomorrow" day offset
+//   shift   — day offset left by the removed reviewer skip button (0 for new saves)
 // Pure functions (no React / DOM) so scripts/verify-daily.mjs can test them.
 
 import { DAY_ONE_TOWNS } from '../core/constants.js';

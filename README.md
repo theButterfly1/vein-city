@@ -85,7 +85,7 @@ vein-city/
 | Feature | Where |
 |---|---|
 | **Daily unlock** — towns 1–3 on day one (`DAY_ONE_TOWNS` in `core/constants.js`), then one more the calendar day after the newest town is solved. Missed days never stack. Locked towns show *"The city wakes in hh:mm:ss"*. | `game/daily.js` (pure, tested by `node scripts/verify-daily.mjs`) · `state/GameContext.jsx` |
-| **Reviewer mode** — the **REVIEWER: SKIP TO TOMORROW** button (menu, top-right) advances the day by one; `?reviewer=1` opens all 30 towns. | `components/menu/MainMenu.jsx` |
+| **Reviewer mode** — `?reviewer=1` opens all 30 towns. | `state/GameContext.jsx` |
 | **Cliffhanger** — after the last town open today, the city teases tomorrow. Edit the lines in `data/cliffhangers.json`. | `components/ui/Cliffhanger.jsx` |
 | **Stars** — 1–3 per town from moves left vs. the level's slack above the minimum solve cost; best result saved; *Replay for 3 ★* on the dossier and the districts grid. | `game/engine.js` (`starRating`) |
 | **City voice** — after each town, OpenAI (`gpt-4o-mini` by default; set `OPENAI_MODEL` to change) via the `/api/city-voice` serverless function (key server-side only, 10 req/min per IP, `max_tokens` 80, 4 s client timeout). Any failure → scripted lines in `data/fallback-lines.json`. | `api/city-voice.js` · `platform/cityVoice.js` |

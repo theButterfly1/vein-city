@@ -109,7 +109,6 @@ export function GameProvider({ children, initialSave }) {
     // Daily gate: towns 1..townCap are open today; reviewers get all 30.
     townCap: cap,
     reviewer: REVIEWER,
-    skipDay() { update(prev => ({ ...prev, daily: { ...prev.daily, shift: prev.daily.shift + 1 } })); },
 
     // Returns true when this solve finishes the last town open today
     // (first-time solve of the cap town, with more towns still to come).

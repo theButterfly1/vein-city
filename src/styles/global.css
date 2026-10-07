@@ -546,14 +546,7 @@ button:focus-visible { outline: 2px dashed var(--gold-bright); outline-offset: 2
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
-/* ── daily unlock / reviewer / cliffhanger / city voice ── */
-.reviewer-skip {
-  position: absolute; top: 58px; right: 16px; z-index: 30;
-  min-height: 40px; padding: 8px 14px;
-  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.12em;
-  color: var(--ink); background: var(--gold-bright); border: 2px dashed var(--ink); border-radius: 4px;
-  cursor: pointer;
-}
+/* ── daily unlock / cliffhanger / city voice ── */
 .lc-replay { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; color: var(--rust); }
 .result-voice {
   margin: 10px 0 4px; min-height: 2.6em;
